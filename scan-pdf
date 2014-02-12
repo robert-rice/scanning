@@ -1,0 +1,175 @@
+#!/bin/bash 
+# Change
+# scan-pdf version 3 
+# April 27, 2004 
+# Copyright 2004 Zacchaeus Pearsall (zap4260 at yahoo.com) 
+# Distributed under the terms of the GNU General Public License v2 
+# 
+# February 15, 2005 
+# Chris Weiss 
+# - Added ADF and color support 
+# - Changed to use sane's built in batch mode 
+# - Added command line options 
+
+###defaults - set these so you don't have to supply them 
+###                    on teh command line ever time 
+
+# Set this to a value between 0 and 1 
+# You may have to play with it some to get good scans 
+# of colored paper,  only used for BW scans 
+THRESHOLD=0.55 
+
+# Scan resolution 
+RES=300 
+
+# Set this to the appropriate sane device for your scanner 
+# if you have more than one or sane doens't autodetect your scanner 
+# SCANDEVICE="epson:/dev/usb/scanner0" 
+SCANDEVICE="" 
+
+# use ADF in no-prompt batch mode.  Add the options your printer needs for this 
+ADF=Y 
+ADFOPTS="--batch-scan=yes"  #hpoj 
+
+# for black and white choose grey 
+# if you have a scanner with a good 1-bit mode choose lineart 
+# for full color PDF's choose color 
+SCANMODE="color" 
+
+# If your scanner has a good 1-bit mode and you plan 
+# to use it then change this to Y 
+SCANNER_HAS_BW=N 
+
+# Paper size for pdf output. See "man convert" for possibilites 
+PAGESIZE="Letter" 
+#TODO: add X and Y sizes for more paper 
+
+# additional options 
+ADDOPT="" 
+
+###end defaults - you shouldn't need to modify anything below here 
+
+myname=`basename "$0"` 
+
+usage() { 
+cat<<EOF 
+$myname scans documents from your flatbed or ADF scanner and stores them in a multi page pdf. 
+
+Usage: $myname [Options] filename.pdf 
+   Options: 
+   -page "size"   Page size for the PDF.  See "man convert" for possibilites 
+   -mode "mode"   lineart, greyscale, or color. 
+   -1bit [Y/N]   If you scanner has a good 1-bit more and you want lineart, use Y here. 
+   -adf [Y/N]   Use ADF in no-prompt batch mode (Y/N) - edit this script and set your scanners options 
+   -res dpi   Resolution to scan at in DPI 
+   -opts "options"   Additional option to pass to 'scanimage' program 
+   -threshold 0.55   Value between 0 and 1 to pass to 'pgmtopbm' 
+   -h Help      This info. 
+    
+Open $myname in your favorite editor to change the default values. 
+
+$myname requires: sane-frontends, imagemagick, netpbm, and ghostscript 
+
+EOF
+
+exit 0 
+} 
+
+while [ $# -ne 0 ]; 
+do 
+    case "$1" in 
+   -page)     shift;   PAGESIZE=$1 ;; 
+   -mode)      shift;   SCANMODE=$1 ;; 
+   -1bit)      shift;   SCANNER_HAS_BW=$1 ;; 
+   -res)      shift;   RES=$1 ;; 
+   -threshold)   shift;   THRESHOLD=$1 ;; 
+   -opts)      shift;   ADDOPT=$1 ;; 
+   -adf)      shift;   ADF=$1 ;; 
+   -h)      usage ;; 
+   *)      PDFFILE=${1} ;; 
+    esac 
+    shift 
+done 
+
+if [ -z ${PDFFILE} ]; then 
+   usage 
+fi 
+
+if [ -e ${PDFFILE} ] 
+then 
+    echo "${PDFFILE}: file exists" 
+    echo "Press any key to overwrite, Ctrl-c to quit" 
+    read -s -n 1 junk 
+fi 
+
+outdir=`dirname "$PDFFILE"` 
+
+OPTIONS="" 
+BITCONVERT="" 
+
+case "$SCANMODE" in 
+color) 
+   OPTIONS=" --mode color" 
+   ;; 
+grayscale) 
+   OPTIONS=" --mode Greyscale" 
+   ;; 
+lineart) 
+    
+   if [ "$SCANNER_HAS_BW" = "Y"] || [ "$SCANNER_HAS_BW" = "y"]; then 
+      OPTIONS=" --mode Lineart" 
+   else 
+      BITCONVERT="Y" 
+      OPTIONS=" --mode Greyscale" 
+   fi 
+esac 
+
+OPTIONS="$OPTIONS --resolution $RES" 
+if [ "$SCANDEVICE" != "" ]; then 
+   OPTIONS="-d $SCANDEVICE $OPTIONS" 
+fi 
+if [ "$ADF" = "Y" ] || [ "$ADF" = "y" ]; then 
+   OPTIONS="$OPTIONS $ADFOPTS" 
+else 
+   OPTIONS="$OPTIONS --batch-prompt" 
+fi 
+if [ -z $ADDOPT ]; then 
+   OPTIONS="$OPTIONS $ADDOPT" 
+fi 
+
+case "${PAGESIZE}" in 
+Letter) 
+   OPTIONS="$OPTIONS -x 212.5 -y 275" ;; 
+esac 
+
+
+origdir=`pwd` 
+cd "$outdir" 
+#echo "scanimage $OPTIONS -b " 
+scanimage $OPTIONS -b 
+
+if [ "$BITCONVERT" != "" ]; then 
+   echo "Converting greyscale to lineart" 
+   for f in "out*.pnm"; do 
+      #echo "cat $f | pgmtopbm -threshold -value ${THRESHOLD} > $f.pbm" 
+      cat $f | pgmtopbm -threshold -value ${THRESHOLD} > $f.pbm 
+      rm -f $f 
+   done 
+   #echo "convert out*.pbm -adjoin -page ${PAGESIZE} ${PDFFILE}.ps" 
+   echo "creating postscript" 
+   convert out*.pbm -adjoin -page ${PAGESIZE} ${PDFFILE}.ps 
+   rm -f out*.pbm 
+else 
+   #echo "convert out*.pnm -adjoin -page ${PAGESIZE} ${PDFFILE}.ps" 
+   echo "creating postscript" 
+   convert out*.pnm -adjoin -page ${PAGESIZE} ${PDFFILE}.ps 
+   rm -f out*.pnm 
+fi 
+
+#echo "ps2pdf13 ${PDFFILE}.ps ${PDFFILE}.ps" 
+echo "Convert postscript to PDF" 
+ps2pdf13 ${PDFFILE}.ps ${PDFFILE} 
+rm -f ${PDFFILE}.ps 
+
+cd "$origdir"
+

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# 2013 by Konrad Voelkel, public domain
+echo "usage: ./scan-archive.sh filename.pdf title subject keywords"
+echo "scanning \"$2\" on \"$3\" about \"$4\"... ($1)"
+scanimage --mode Color --resolution 600 --format pnm > out.pnm
+echo "processing... ($1)"
+scantailor-cli --color-mode=black_and_white --despeckle=normal out.pnm ./
+rm -rf cache out.pnm
+tiff2pdf -o "$1" -z -u m -p "A4" -F -c "scanimage+unpaper+tiff2pdf+pdftk+imagemagick+tesseract+exactimage" -a "Author Name" -t "$2" -s "$3" -k "$4" out.tif
+rm -f out.tif
+echo "converting to PDF 1.4 ($1)..."
+mv "$1" "$1.bak"
+pdftk "$1.bak" dump_data > data_dump.info
+pdftk "$1.bak" cat output "$1.bk2" flatten
+echo "OCR in lang eng... ($1)"
+convert -normalize -density 300 -depth 8 "$1.bk2" "$1.png"
+tesseract -l eng -psm 1 "$1.png" "$1" hocr
+convert "$1.png" "$1.jpg"
+hocr2pdf -i "$1.jpg" -s -o "$1.bk2" < "$1.html"
+echo "Inserting metadata... ($1)"
+pdftk "$1.bk2" update_info data_dump.info output "$1"
+rm -f "$1.bak" "$1.bk2" data_dump.info
+rm -f "$1.png" "$1.jpg" "$1.html" "$1.pdf"
+echo "done. wrote file. ($1)"

@@ -1,0 +1,144 @@
+#!/bin/bash
+
+startdir=$(pwd)
+tmpdir=scan-$RANDOM
+
+#### DEFAULTS ####
+OCR="N"
+RES="300"
+PAGESIZE="Letter"
+SIDES="double"
+SCANMODE="lineart"
+
+myname=`basename "$0"` 
+
+usage() { 
+cat<<EOF 
+$myname scans documents from your flatbed or ADF scanner and stores them in a multi page pdf. 
+
+Usage: $myname [Options] filename.pdf 
+   Scan Options: 
+   -page "size"   Page size for the PDF.  See "man convert" for possibilites 
+   -mode "mode"   lineart, greyscale, or color. 
+   -sides "sides"   single, double
+   -ocr [Y/N]   Do OCR (Y/N) for each page. This takes a long time. 
+   -res dpi   Resolution to scan at in DPI 
+   -opts "options"   Additional option to pass to 'scanimage' program 
+   PDF Options:
+   -k keyword1,keyword2,...    Keywords separated by commas, without spaces [REQUIRED]
+   -title "Title"   The title for the PDF document [REQUIRED]
+   -sub "Subject"   The subject for the PDF document [REQUIRED]
+   -h Help      This info. 
+    
+Open $myname in your favorite editor to change the default values. 
+
+$myname requires: sane-frontends, imagemagick, netpbm, and ghostscript 
+
+EOF
+
+exit 0 
+} 
+
+while [ $# -ne 0 ]; 
+do 
+    case "$1" in 
+   -page)     shift;   PAGESIZE=$1 ;; 
+   -mode)      shift;   SCANMODE=$1 ;; 
+   -res)      shift;   RES=$1 ;; 
+   -opts)      shift;   ADDOPT=$1 ;; 
+   -sides)      shift;   SIDES=$1 ;;
+   -ocr)      shift;   OCR=$1 ;;
+   -k)    shift;   KEYWORDS=$1 ;;
+   -title)    shift;   TITLE=$1 ;;
+   -sub)      shift;   SUBJECT=$1 ;;
+   -h)      usage ;; 
+   *)      PDFFILE=${1} ;; 
+    esac 
+    shift 
+done 
+
+if [ -z ${PDFFILE} ]; then 
+   usage 
+fi 
+
+if [ -e ${PDFFILE} ] 
+then 
+    echo "${PDFFILE}: file exists" 
+    echo "Press any key to overwrite, Ctrl-c to quit" 
+    read -s -n 1 junk 
+fi 
+
+OPTIONS="" 
+
+case "$SCANMODE" in 
+color) 
+   OPTIONS=" --mode color" ;; 
+grayscale) 
+   OPTIONS=" --mode Greyscale" ;; 
+lineart) 
+   OPTIONS=" --mode Lineart" ;;
+esac 
+
+# Set resolution
+OPTIONS="$OPTIONS --resolution $RES" 
+
+# Roll in additional options
+if [ -z $ADDOPT ]; then 
+   OPTIONS="$OPTIONS $ADDOPT" 
+fi 
+
+# Switch on pagesize
+case "${PAGESIZE}" in 
+Letter) 
+   OPTIONS="$OPTIONS -x 212.5 -y 275" ;; 
+Legal)
+   OPTIONS="$OPTIONS -x 212.5 -y 352" ;;
+esac 
+
+# Switch on single/double sided
+case "${SIDES}" in
+single)
+   OPTIONS="$OPTIONS --source \"ADF Front\"" ;;
+double)
+   OPTIONS="$OPTIONS --source \"ADF Duplex\"" ;;
+esac
+
+###########################################################
+
+#### Scan Operations ####
+cd /tmp
+mkdir $tmpdir
+cd $tmpdir
+echo "################## Scanning ###################"
+eval scanimage --batch --format=tiff ${OPTIONS}
+
+#### OCR Operations ####
+# Only do OCR if really necessary
+if [ "$OCR" = "Y" ] || [ "$OCR" = "y" ]; then
+    echo "################### OCRing ####################"
+    i=1
+    for page in $(ls *.tif); do
+        echo -n "Page: $i - "
+        #run tesseract on each page and combine the outputs in a single file with a .txt extension.
+        tesseract $page $page
+        echo "---BEGIN PAGE: $i ---" >> $outname.txt
+        cat $page.txt >> $outname.txt
+        echo "---END PAGE: $1 ---" >> $outname.txt
+        i=$(expr $i + 1)
+    done
+    mv $outname.txt $startdir
+fi
+
+#### PDF Conversion ####
+echo "############## Converting to PDF ##############"
+#Use tiffcp to combine output tiffs to a single multi-page tiff
+tiffcp -c lzw out*.tif output.tif
+#Convert the tiff to PDF
+tiff2pdf output.tif -z -u m -F -c "scanimage+tiff2pdf+tesseract" -a "Robert Rice" -t "$TITLE" -s "$SUBJECT" -k "$KEYWORDS" > $startdir/$PDFFILE
+#echo "tiff2pdf output.tif -z -u m -F -c \"scanimage+tiff2pdf+tesseract\" -a \"Robert Rice\" -t \"$TITLE\" -s \"$SUB\" -k \"$KEYWORDS\" \> $startdir\/$PDFFILE"
+
+#### Cleanup ####
+cd ..
+echo "################ Cleaning Up ################"
+rm -rf $tmpdir
+cd $startdir

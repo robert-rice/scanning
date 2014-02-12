@@ -90,17 +90,17 @@ fi
 # Switch on pagesize
 case "${PAGESIZE}" in 
 Letter) 
-   OPTIONS="$OPTIONS -x 212.5 -y 275" ;; 
+   SIZE="-x 212.5 -y 275" ;; 
 Legal)
-   OPTIONS="$OPTIONS -x 212.5 -y 352" ;;
+   SIZE="-x 212.5 -y 352" ;; 
 esac 
 
 # Switch on single/double sided
 case "${SIDES}" in
 single)
-   OPTIONS="$OPTIONS --source \"ADF Front\"" ;;
+   SOURCE="ADF Front" ;;
 double)
-   OPTIONS="$OPTIONS --source \"ADF Duplex\"" ;;
+   SOURCE="ADF Duplex" ;;
 esac
 
 ###########################################################
@@ -110,7 +110,7 @@ cd /tmp
 mkdir $tmpdir
 cd $tmpdir
 echo "################## Scanning ###################"
-eval scanimage --batch --format=tiff ${OPTIONS}
+scanimage --batch --format=tiff ${OPTIONS} --source "${SOURCE}" ${SIZE}
 
 #### OCR Operations ####
 # Only do OCR if really necessary

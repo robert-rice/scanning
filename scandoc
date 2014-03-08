@@ -9,6 +9,7 @@ RES="300"
 PAGESIZE="Letter"
 SIDES="double"
 SCANMODE="lineart"
+EVERNOTE="Y"
 
 myname=`basename "$0"` 
 
@@ -28,6 +29,7 @@ Usage: $myname [Options] filename.pdf
    -k keyword1,keyword2,...    Keywords separated by commas, without spaces [REQUIRED]
    -title "Title"   The title for the PDF document [REQUIRED]
    -sub "Subject"   The subject for the PDF document [REQUIRED]
+   -evernote    Send the PDF to evernote
    -h Help      This info. 
     
 Open $myname in your favorite editor to change the default values. 
@@ -51,6 +53,7 @@ do
    -k)    shift;   KEYWORDS=$1 ;;
    -title)    shift;   TITLE=$1 ;;
    -sub)      shift;   SUBJECT=$1 ;;
+   -evernote)      EVERNOTE="Y" ;;
    -h)      usage ;; 
    *)      PDFFILE=${1} ;; 
     esac 
@@ -142,3 +145,10 @@ cd ..
 echo "################ Cleaning Up ################"
 rm -rf $tmpdir
 cd $startdir
+
+echo "################ Sending to Evernote ################"
+if [ "$EVERNOTE" = "Y" ]; then
+    NOTEBOOK="@$SUBJECT"
+    TAGS="#$(echo $KEYWORDS | sed -e 's/,/ #/g')"
+    sendemail -s smtp.gmail.com:587 -f $GMAIL -xu $GMAIL -xp $PASSWORD -t $ENOTEEMAIL -u "$TITLE $NOTEBOOK $TAGS" -m "$TITLE $NOTEBOOK $TAGS" -a $PDFFILE
+fi
